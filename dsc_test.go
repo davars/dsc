@@ -38,3 +38,23 @@ func TestParse(t *testing.T) {
 		assert.Equal(t, test.out, parseResult{err: err, packet: packet})
 	}
 }
+
+func TestSerialize(t *testing.T) {
+	tests := []struct {
+		in  Packet
+		out []byte
+	}{
+		{
+			in:  Packet{Command: 654, Data: "3"},
+			out: []byte("6543D2\r\n"),
+		},
+		{
+			in:  Packet{Command: 654, Data: "3324293"},
+			out: []byte("654332429309\r\n"),
+		},
+	}
+
+	for _, test := range tests {
+		assert.Equal(t, test.out, test.in.Serialize())
+	}
+}

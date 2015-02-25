@@ -2,6 +2,7 @@ package dsc
 
 import (
 	"errors"
+	"fmt"
 	"regexp"
 	"strconv"
 )
@@ -46,4 +47,10 @@ func checksum(in []byte) (sum byte) {
 		sum += b
 	}
 	return
+}
+
+func (p *Packet) Serialize() []byte {
+	message := fmt.Sprintf("%03d%s", p.Command, p.Data)
+	cksum := checksum([]byte(message))
+	return []byte(fmt.Sprintf("%s%02X\r\n", message, cksum))
 }
