@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 
 	"bitbucket.org/davars/dsc"
@@ -106,7 +107,14 @@ func main() {
 	select {}
 }
 
+var sendMutex sync.Mutex
+
 func send(s io.Writer, packet dsc.Packet) {
+	sendMutex.Lock()
+	defer sendMutex.Unlock()
 	log.Printf("-> %+v\n", packet)
-	s.Write(packet.Serialize())
+	_, err := s.Write(packet.Serialize())
+	if err != nil {
+		log.Fatalf("error sending command: %v", err)
+	}
 }
