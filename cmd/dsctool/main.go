@@ -1,16 +1,27 @@
 package main
 
 import (
-	"bitbucket.org/davars/dsc"
 	"bufio"
 	"flag"
-	"fmt"
-	"github.com/tarm/goserial"
 	"io"
 	"log"
 	"os"
 	"os/exec"
+	"os/signal"
+	"strings"
+	"syscall"
+
+	"bitbucket.org/davars/dsc"
+	"github.com/tarm/goserial"
 )
+
+func stty(args ...string) (string, error) {
+	output, err := exec.Command("stty", append([]string{"-F", "/dev/tty"}, args...)...).Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
 
 func main() {
 	device := flag.String("device", "", "IT-100 Serial Port, e.g. /dev/ttyUSB0")
@@ -21,15 +32,40 @@ func main() {
 		return
 	}
 
-	c := &serial.Config{Name: *device, Baud: 9600}
-	s, err := serial.OpenPort(c)
+	termSettings, err := stty("-g")
+	if err != nil {
+		log.Fatalf("unable to save terminal settings: %v\noutput: %q", err, termSettings)
+	}
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT)
+
+	go func() {
+		// restore the terminal state when exiting
+		<-sig
+		log.Printf("exiting")
+		_, err := stty(termSettings)
+		if err != nil {
+			log.Fatalf("failed to restore settings (%v), try running %q", err, "stty "+termSettings)
+		}
+		os.Exit(0)
+	}()
+
+	// disable input buffering
+	stty("cbreak", "min", "1")
+	// do not display entered characters on the screen
+	stty("-echo")
+
+	ser, err := serial.OpenPort(&serial.Config{Name: *device, Baud: 9600})
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	wait := make(chan bool)
 	go func() {
-		scanner := bufio.NewScanner(s)
+		scanner := bufio.NewScanner(ser)
 		for scanner.Scan() {
 			bytes := scanner.Bytes()
 			packet, err := dsc.Parse(bytes)
@@ -44,18 +80,13 @@ func main() {
 		}
 	}()
 
-	// Request status update
+	// initial commands
 	go func() {
-		send(s, dsc.Packet{Command: 1})
+		// disable timestamp prefix
+		send(ser, dsc.Packet{Command: 55, Data: "0"})
+		// request status update
+		send(ser, dsc.Packet{Command: 1})
 	}()
-
-	// disable input buffering
-	exec.Command("stty", "-F", "/dev/tty", "cbreak", "min", "1").Run()
-	// do not display entered characters on the screen
-	exec.Command("stty", "-F", "/dev/tty", "-echo").Run()
-	// restore the echoing state when exiting
-	fmt.Fprintln(os.Stderr, "WARNING: echo disabled, 'stty -F /dev/tty echo' to restore it!") // if the next line fails
-	defer exec.Command("stty", "-F", "/dev/tty", "echo").Run()
 
 	// Send keypresses
 	go func() {
@@ -69,10 +100,10 @@ func main() {
 				panic(err)
 			}
 			// TODO: validate input
-			send(s, dsc.Packet{Command: 70, Data: string(buf)})
+			send(ser, dsc.Packet{Command: 70, Data: string(buf)})
 		}
 	}()
-	<-wait
+	select {}
 }
 
 func send(s io.Writer, packet dsc.Packet) {

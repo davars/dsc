@@ -13,15 +13,22 @@ type Packet struct {
 }
 
 var (
-	re           = regexp.MustCompile(`^((\d{3})(.*))(.{2})$`)
-	ErrMalformed = errors.New("Malformed command received")
-	ErrChecksum  = errors.New("Incorrect checksum")
+	re          = regexp.MustCompile(`^((\d{3})(.*))(.{2})$`)
+	ErrChecksum = errors.New("incorrect checksum")
 )
+
+type ErrMalformed struct {
+	in []byte
+}
+
+func (e ErrMalformed) Error() string {
+	return fmt.Sprintf("malformed command received: %q", string(e.in))
+}
 
 func Parse(in []byte) (packet Packet, err error) {
 	match := re.FindSubmatch(in)
 	if len(match) != 5 {
-		return Packet{}, ErrMalformed
+		return Packet{}, ErrMalformed{in: in}
 	}
 
 	command, err := strconv.ParseUint(string(match[2]), 10, 16)

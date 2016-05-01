@@ -1,8 +1,9 @@
 package dsc
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 type parseResult struct {
@@ -25,7 +26,7 @@ func TestParse(t *testing.T) {
 		},
 		{
 			in:  []byte("6543"),
-			out: parseResult{err: ErrMalformed, packet: Packet{}},
+			out: parseResult{err: ErrMalformed{in: []byte("6543")}, packet: Packet{}},
 		},
 		{
 			in:  []byte("654332429309"),
